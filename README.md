@@ -25,7 +25,7 @@ This is an interactive visualization of 4D space rendered onto a 2D screen using
 | Control | Action |
 |---------|--------|
 | Left Joystick | Move forward/backward and strafe |
-| Right Joystick | Rotate camera (Yaw) and 4D view angle (Pitch4D) |
+| Right Joystick | Rotate camera (Yaw + Pitch, FPS-style) |
 | W+ Button | Move in positive W direction |
 | W- Button | Move in negative W direction |
 
@@ -39,7 +39,8 @@ This is an interactive visualization of 4D space rendered onto a 2D screen using
 | D / Arrow Right | Strafe right |
 | E | Move in positive W direction (W+) |
 | Q | Move in negative W direction (W-) |
-| Mouse (click to lock) | Look around (Yaw and Pitch4D) |
+| Mouse (click to lock) | Look around (Yaw + Pitch, FPS-style) |
+| Scroll Wheel | Rotate in 4D (Pitch4D, Z-W plane) |
 | ESC | Exit mouse lock |
 
 ### UI Buttons

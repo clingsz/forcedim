@@ -110,7 +110,8 @@
     <div>POS W:<span id="vw" class="val-w">0.0</span></div>
     <div style="margin-top:5px; padding-top:5px; border-top:1px solid #333;">
         <div>Yaw:<span id="vyaw" class="val">0°</span></div>
-        <div>Pitch4D:<span id="vpitch" class="val">0°</span></div>
+        <div>Pitch:<span id="vpitch3d" class="val">0°</span></div>
+        <div>Pitch4D:<span id="vpitch4d" class="val-w">0°</span></div>
     </div>
 </div>
 
@@ -156,7 +157,8 @@ try {
         z: document.getElementById('vz'),
         w: document.getElementById('vw'),
         yaw: document.getElementById('vyaw'),
-        pitch: document.getElementById('vpitch'),
+        pitch: document.getElementById('vpitch3d'),
+        pitch4d: document.getElementById('vpitch4d'),
         msg: document.getElementById('center-msg'),
         alert: document.getElementById('alert-layer'),
         toggle: document.getElementById('btn-toggle'),
@@ -199,7 +201,7 @@ try {
     };
 
     // 初始位置: Z=-4.5
-    const SPAWN = { x:0, y:CONFIG.eyeY, z:-4.5, w:0, yaw:0, pitch4D:0 };
+    const SPAWN = { x:0, y:CONFIG.eyeY, z:-4.5, w:0, yaw:0, pitch:0, pitch4D:0 };
     let cam = { ...SPAWN };
     let input = { mx:0, mz:0, lx:0, ly:0, w:0 };
     let showWalls = true;
@@ -371,25 +373,32 @@ try {
         let tz = p.z - cam.z;
         let tw = p.w - cam.w;
 
+        // Yaw rotation (horizontal, around Y axis)
         let c = Math.cos(cam.yaw), s = Math.sin(cam.yaw);
         let rx = tx*c - tz*s;
         let ry = ty;
         let rz = tx*s + tz*c;
         let rw = tw;
 
+        // Pitch rotation (vertical, around X axis - FPS style look up/down)
+        let cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+        let ry2 = ry*cp - rz*sp;
+        let rz3 = ry*sp + rz*cp;
+
+        // Pitch4D rotation (Z-W plane rotation for 4D viewing)
         let c4 = Math.cos(cam.pitch4D), s4 = Math.sin(cam.pitch4D);
-        let rz2 = rz*c4 - rw*s4; // Z和W旋转混合
-        let rw2 = rz*s4 + rw*c4;
+        let rz4 = rz3*c4 - rw*s4;
+        let rw2 = rz3*s4 + rw*c4;
 
         // 距离计算用于透明度 (不变)
-        let dist = Math.sqrt(rx*rx + ry*ry + rz2*rz2 + rw2*rw2);
+        let dist = Math.sqrt(rx*rx + ry2*ry2 + rz4*rz4 + rw2*rw2);
 
         // --- NEW: 线性深度计算 ---
         // 使用加法而不是乘法来合并深度。
         // 公式：Depth = Z + W + Offset
         // 这保证了线性方程保持线性（直线变直线）
 
-        let depth = rz2 + rw2 + 3.0; // 3.0 是相机偏移，防止近处裁切太生硬
+        let depth = rz4 + rw2 + 3.0; // 3.0 是相机偏移，防止近处裁切太生硬
 
         if (depth < CONFIG.nearClip) return null;
 
@@ -397,7 +406,7 @@ try {
 
         return {
             x: window.innerWidth/2 + rx * scale,
-            y: window.innerHeight/2 - ry * scale,
+            y: window.innerHeight/2 - ry2 * scale,
             dist: dist,
             scale: scale
         };
@@ -504,7 +513,9 @@ try {
         if(finished) return;
 
         cam.yaw += input.lx * CONFIG.speedR;
-        cam.pitch4D -= input.ly * CONFIG.speedR;
+        cam.pitch -= input.ly * CONFIG.speedR;
+        // Clamp pitch to prevent flipping (like FPS games)
+        cam.pitch = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, cam.pitch));
 
         // XZW各向同性移动逻辑
         let c = Math.cos(cam.yaw);
@@ -582,7 +593,8 @@ try {
             ui.w.classList.remove('pulse');
         }
         ui.yaw.innerText = (cam.yaw * 180 / Math.PI % 360).toFixed(0) + "°";
-        ui.pitch.innerText = (cam.pitch4D * 180 / Math.PI % 360).toFixed(0) + "°";
+        ui.pitch.innerText = (cam.pitch * 180 / Math.PI).toFixed(0) + "°";
+        ui.pitch4d.innerText = (cam.pitch4D * 180 / Math.PI % 360).toFixed(0) + "°";
     }
 
     function loop() {
@@ -718,14 +730,24 @@ try {
             // Pointer locked - use movementX/Y directly
             const sensitivity = 0.003;
             cam.yaw += e.movementX * sensitivity;
-            cam.pitch4D -= e.movementY * sensitivity;
+            cam.pitch -= e.movementY * sensitivity;
+            // Clamp pitch to prevent flipping
+            cam.pitch = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, cam.pitch));
         } else if (mouseDown) {
             // Fallback: drag to look
             const sensitivity = 0.003;
             cam.yaw += e.movementX * sensitivity;
-            cam.pitch4D -= e.movementY * sensitivity;
+            cam.pitch -= e.movementY * sensitivity;
+            cam.pitch = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, cam.pitch));
         }
     });
+
+    // Scroll wheel for Pitch4D (4th dimension rotation)
+    canvas.addEventListener('wheel', e => {
+        e.preventDefault();
+        const sensitivity = 0.002;
+        cam.pitch4D += e.deltaY * sensitivity;
+    }, { passive: false });
 
     // ESC to exit pointer lock (browser handles this, but good to know)
     window.addEventListener('keydown', e => {
