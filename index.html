@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>4D 三目标挑战</title>
+    <style>
+        body {
+            margin: 0; overflow: hidden; background-color: #000; color: #aaa;
+            font-family: 'Consolas', monospace; touch-action: none;
+            user-select: none; -webkit-user-select: none;
+        }
+        canvas { display: block; width: 100vw; height: 100vh; }
+
+        /* HUD */
+        #hud {
+            position: absolute; top: 10px; left: 10px; pointer-events: none;
+            font-size: 11px; background: rgba(0,0,0,0.8);
+            padding: 8px; border: 1px solid #333; border-left: 2px solid #0f0;
+        }
+        .val { color: #fff; font-weight: bold; margin-left: 5px; }
+        .val-w { color: #0af; font-weight: bold; margin-left: 5px; }
+
+        /* 目标清单 */
+        #goal-panel {
+            position: absolute; top: 10px; right: 10px; pointer-events: none;
+            background: rgba(0,0,0,0.8); padding: 10px; border: 1px solid #333;
+            text-align: right; font-size: 11px;
+        }
+        .goal-row { margin-bottom: 4px; font-weight: bold; }
+        .done { text-decoration: line-through; opacity: 0.5; color: #888 !important; }
+
+        /* 控件 */
+        #btn-reset {
+            position: absolute; top: 100px; left: 10px; pointer-events: auto;
+            background: #111; border: 1px solid #444; color: #888;
+            padding: 6px 12px; border-radius: 4px; font-weight: bold; font-size: 11px;
+        }
+        #btn-toggle {
+            position: absolute; top: 10px; left: 140px; pointer-events: auto;
+            background: #111; border: 1px solid #0af; color: #0af;
+            padding: 6px 10px; border-radius: 4px; font-weight: bold; font-size: 11px;
+        }
+
+        /* 警告层 */
+        #alert-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
+            box-shadow: inset 0 0 0 0 rgba(255, 0, 0, 0); transition: box-shadow 0.1s;
+        }
+        #alert-layer.active { box-shadow: inset 0 0 80px 40px rgba(200, 0, 0, 0.3); }
+
+        #center-msg {
+            position: absolute; top: 40%; width: 100%; text-align: center;
+            color: #f33; font-weight: bold; font-size: 16px; display: none; pointer-events: none;
+            text-shadow: 0 0 5px #000; letter-spacing: 2px;
+        }
+
+        /* W轴 */
+        .w-controls {
+            position: absolute; right: 20px; bottom: 160px;
+            display: flex; flex-direction: column; gap: 15px; pointer-events: auto;
+        }
+        .btn-w {
+            width: 50px; height: 50px; border-radius: 50%;
+            background: rgba(0, 40, 80, 0.5); border: 1px solid rgba(0, 160, 255, 0.5);
+            color: #0af; font-weight: bold; font-size: 12px;
+            display: flex; justify-content: center; align-items: center;
+            backdrop-filter: blur(2px);
+        }
+        .btn-w:active { background: #0af; color: #000; transform: scale(0.9); }
+
+        /* 摇杆 */
+        .controls-area {
+            position: absolute; bottom: 30px; width: 100%;
+            display: flex; justify-content: space-between; padding: 0 30px;
+            box-sizing: border-box; pointer-events: auto;
+        }
+        .joystick {
+            width: 100px; height: 100px; background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 50%; position: relative;
+        }
+        .knob {
+            width: 30px; height: 30px; background: rgba(0, 255, 150, 0.3);
+            border: 1px solid rgba(0, 255, 150, 0.5); border-radius: 50%;
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: none;
+        }
+        .label {
+            position: absolute; width: 100%; text-align: center; top: 110px;
+            font-size: 10px; color: #555; font-weight: bold;
+        }
+
+        #win-screen {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9); border: 1px solid #ffd700; padding: 20px;
+            text-align: center; display: none; color: #ffd700; z-index: 100; font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="alert-layer"></div>
+<div id="center-msg">🚫 边界阻挡</div>
+<canvas id="canvas"></canvas>
+
+<div id="hud">
+    <div>POS X:<span id="vx" class="val">0.0</span></div>
+    <div>POS Z:<span id="vz" class="val">0.0</span></div>
+    <div>POS W:<span id="vw" class="val-w">0.0</span></div>
+    <div style="margin-top:5px; padding-top:5px; border-top:1px solid #333;">
+        <div>Yaw:<span id="vyaw" class="val">0°</span></div>
+        <div>Pitch4D:<span id="vpitch" class="val">0°</span></div>
+    </div>
+</div>
+
+<!-- 目标面板 -->
+<div id="goal-panel">
+    <div id="g-x" class="goal-row" style="color:#f55">TARGET X: --</div>
+    <div id="g-z" class="goal-row" style="color:#fd0">TARGET Z: --</div>
+    <div id="g-w" class="goal-row" style="color:#0ff">TARGET W: --</div>
+</div>
+
+<button id="btn-toggle">墙体: ON</button>
+<button id="btn-reset">重置</button>
+
+<div id="win-screen">
+    <h2 style="margin:0 0 10px 0">任务完成</h2>
+    <div style="color:#aaa">所有目标已捕获</div>
+</div>
+
+<div class="w-controls">
+    <button class="btn-w" id="btn-k">W+</button>
+    <button class="btn-w" id="btn-a">W-</button>
+</div>
+
+<div class="controls-area">
+    <div class="joystick" id="stick-l">
+        <div class="knob" id="knob-l"></div>
+        <div class="label">MOVE</div>
+    </div>
+    <div class="joystick" id="stick-r">
+        <div class="knob" id="knob-r"></div>
+        <div class="label">LOOK</div>
+    </div>
+</div>
+
+<script>
+try {
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // UI Refs
+    const ui = {
+        x: document.getElementById('vx'),
+        z: document.getElementById('vz'),
+        w: document.getElementById('vw'),
+        yaw: document.getElementById('vyaw'),
+        pitch: document.getElementById('vpitch'),
+        msg: document.getElementById('center-msg'),
+        alert: document.getElementById('alert-layer'),
+        toggle: document.getElementById('btn-toggle'),
+        win: document.getElementById('win-screen'),
+        // Goals
+        gx: document.getElementById('g-x'),
+        gz: document.getElementById('g-z'),
+        gw: document.getElementById('g-w')
+    };
+
+    function resize() {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.width = window.innerWidth * dpr;
+        canvas.height = window.innerHeight * dpr;
+        ctx.scale(dpr, dpr);
+        canvas.style.width = '100vw';
+        canvas.style.height = '100vh';
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // --- 1. 配置 ---
+    const CONFIG = {
+        bound: 6.0,
+        eyeY: 0.5,
+        floorY: 0.0,
+
+        // 调整焦距以匹配线性投影的新逻辑，保持视觉大小一致
+        // 之前 focal3D=600, focal4D=2.8.
+        // 线性投影下，大约 250 的统一焦距能获得类似的视场角
+        focalLinear: 250,
+
+        nearClip: 0.2,
+        renderDist: 14.0,
+
+        speedM: 0.05,
+        speedR: 0.02,
+        speedW: 0.04,
+        playerR: 0.3
+    };
+
+    // 初始位置: Z=-4.5
+    const SPAWN = { x:0, y:CONFIG.eyeY, z:-4.5, w:0, yaw:0, pitch4D:0 };
+    let cam = { ...SPAWN };
+    let input = { mx:0, mz:0, lx:0, ly:0, w:0 };
+    let showWalls = true;
+    let finished = false;
+
+    // --- 目标数据 ---
+    // 三个目标点
+    let goals = [
+        { id: 'x', name: "TARGET X", x: 5.0, y: 0.5, z: 0, w: 0, color: "#f55", done: false, el: ui.gx },
+        { id: 'z', name: "TARGET Z", x: 0, y: 0.5, z: 5.0, w: 0, color: "#fd0", done: false, el: ui.gz },
+        { id: 'w', name: "TARGET W", x: 0, y: 0.5, z: 0, w: 5.0, color: "#0ff", done: false, el: ui.gw }
+    ];
+
+    // --- 2. 场景构建 (完全复用 高密度版 逻辑) ---
+    let renderList = { lines: [], dots: [] };
+
+    function addLine(p1, p2, color, width=1) { renderList.lines.push({p1, p2, color, width}); }
+    function addDot(p, color, size=1.5, type=0) { renderList.dots.push({p, color, size, type}); }
+
+    // 2.1 地面 (高密度)
+    {
+        const range = 6.0;
+        const stepXZ = 0.5; // XZ平面高密度: 0.5
+        const stepW = 1.5;  // W轴分层间距: 1.5
+        const y = CONFIG.floorY;
+
+        for(let w = -range; w <= range + 0.1; w += stepW) {
+            for(let x = -range; x <= range + 0.1; x += stepXZ) {
+                for(let z = -range; z <= range + 0.1; z += stepXZ) {
+
+                    let p = {x, y, z, w};
+                    addDot(p, "#444", 1.2, 0);
+
+                    if(x + stepXZ <= range + 0.1) addLine(p, {x:x+stepXZ, y, z, w}, "#222", 0.5);
+                    if(z + stepXZ <= range + 0.1) addLine(p, {x, y, z:z+stepXZ, w}, "#222", 0.5);
+                    if(w + stepW <= range + 0.1) addLine(p, {x, y, z, w:w+stepW}, "#113", 0.5);
+                }
+            }
+        }
+    }
+
+    // 2.2 边界 (高密度)
+    {
+        const b = CONFIG.bound;
+        const step = 0.5;
+        let axes = ['x', 'z', 'w'];
+        let vals = [-b, b];
+
+        function genEdge(fixedAxis1, val1, fixedAxis2, val2, runAxis) {
+            for(let v = -b; v <= b; v += step) {
+                let p = {x:0, y:0, z:0, w:0};
+                p[fixedAxis1] = val1;
+                p[fixedAxis2] = val2;
+                p[runAxis] = v;
+
+                addDot(p, "#f00", 2.0, 1);
+
+                if (v + step <= b + 0.1) {
+                    let pNext = {...p};
+                    pNext[runAxis] = v + step;
+                    addLine(p, pNext, "#800", 1.5);
+                }
+            }
+        }
+
+        vals.forEach(vz => vals.forEach(vw => genEdge('z', vz, 'w', vw, 'x')));
+        vals.forEach(vx => vals.forEach(vw => genEdge('x', vx, 'w', vw, 'z')));
+        vals.forEach(vx => vals.forEach(vz => genEdge('x', vx, 'z', vz, 'w')));
+    }
+
+    // 2.3 墙体
+    let wallColliders = [];
+    for(let x = -2; x <= 2; x += 1.2) {
+        let cx = x, cy = 0.5, cz = 0, cw = 0;
+        let r = 0.5;
+        let v = [];
+        for(let k=0; k<8; k++) {
+            v.push({
+                x: cx + ((k&1)?r:-r),
+                y: cy + ((k&2)?r:-r),
+                z: cz + ((k&4)?r:-r),
+                w: cw
+            });
+        }
+        const edges = [[0,1],[1,3],[3,2],[2,0], [4,5],[5,7],[7,6],[6,4], [0,4],[1,5],[2,6],[3,7]];
+
+        wallColliders.push({
+            lines: edges.map(e => ({p1:v[e[0]], p2:v[e[1]], color:"#0cc", width:1.5})),
+            dots: v.map(p => ({p, color:"#0ff", size:2.0})),
+            cx, cz, cw, r:0.6
+        });
+    }
+
+    // --- 3. 渲染管线 (核心修改：线性投影) ---
+
+    function project(p) {
+        let tx = p.x - cam.x;
+        let ty = p.y - cam.y;
+        let tz = p.z - cam.z;
+        let tw = p.w - cam.w;
+
+        let c = Math.cos(cam.yaw), s = Math.sin(cam.yaw);
+        let rx = tx*c - tz*s;
+        let ry = ty;
+        let rz = tx*s + tz*c;
+        let rw = tw;
+
+        let c4 = Math.cos(cam.pitch4D), s4 = Math.sin(cam.pitch4D);
+        let rz2 = rz*c4 - rw*s4; // Z和W旋转混合
+        let rw2 = rz*s4 + rw*c4;
+
+        // 距离计算用于透明度 (不变)
+        let dist = Math.sqrt(rx*rx + ry*ry + rz2*rz2 + rw2*rw2);
+
+        // --- NEW: 线性深度计算 ---
+        // 使用加法而不是乘法来合并深度。
+        // 公式：Depth = Z + W + Offset
+        // 这保证了线性方程保持线性（直线变直线）
+
+        let depth = rz2 + rw2 + 3.0; // 3.0 是相机偏移，防止近处裁切太生硬
+
+        if (depth < CONFIG.nearClip) return null;
+
+        let scale = CONFIG.focalLinear / depth;
+
+        return {
+            x: window.innerWidth/2 + rx * scale,
+            y: window.innerHeight/2 - ry * scale,
+            dist: dist,
+            scale: scale
+        };
+    }
+
+    // 绘图 (保持原样，无需细分)
+    function drawLine(l) {
+        let pp1 = project(l.p1);
+        let pp2 = project(l.p2);
+        if(!pp1 || !pp2) return;
+
+        let dist = (pp1.dist + pp2.dist) / 2;
+        let alpha = Math.max(0, 1.0 - (dist / CONFIG.renderDist));
+        if(alpha <= 0.01) return;
+
+        ctx.strokeStyle = l.color;
+        ctx.globalAlpha = alpha;
+        ctx.lineWidth = l.width;
+        ctx.beginPath();
+        ctx.moveTo(pp1.x, pp1.y);
+        ctx.lineTo(pp2.x, pp2.y);
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
+    }
+
+    function drawDot(d) {
+        let pp = project(d.p);
+        if(!pp) return;
+
+        let alpha = Math.max(0, 1.0 - (pp.dist / CONFIG.renderDist));
+        if(alpha <= 0.01) return;
+
+        ctx.fillStyle = d.color;
+        ctx.globalAlpha = alpha;
+
+        let r = Math.min(d.size, 1.5);
+        if (pp.dist > 5.0) r *= (5.0 / pp.dist);
+
+        ctx.beginPath();
+        ctx.arc(pp.x, pp.y, r, 0, Math.PI*2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+    }
+
+    // 绘制目标点
+    function drawGoal(g) {
+        if(g.done) return;
+        let pp = project({x:g.x, y:g.y, z:g.z, w:g.w});
+        if(pp) {
+            let alpha = Math.max(0, 1.0 - (pp.dist / CONFIG.renderDist));
+            if(alpha <= 0.01) return;
+
+            let wDiff = Math.abs(g.w - cam.w);
+            let highlight = Math.max(0.2, 1 - wDiff/1.5);
+
+            ctx.fillStyle = g.color;
+            ctx.globalAlpha = alpha * highlight;
+
+            // 目标点大小基于新的 scale
+            let r = Math.min(6, 60 * pp.scale);
+
+            ctx.beginPath(); ctx.arc(pp.x, pp.y, r, 0, Math.PI*2); ctx.fill();
+
+            // 文字
+            if(alpha > 0.3) {
+                ctx.font = "bold 11px Consolas";
+                ctx.textAlign = "center";
+                ctx.fillText(g.name, pp.x, pp.y - 10);
+            }
+            ctx.globalAlpha = 1.0;
+        }
+    }
+
+    function render() {
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        renderList.lines.forEach(drawLine);
+        renderList.dots.forEach(drawDot);
+
+        if(showWalls) {
+            wallColliders.forEach(obj => {
+                obj.lines.forEach(drawLine);
+                obj.dots.forEach(drawDot);
+            });
+        }
+        goals.forEach(drawGoal);
+    }
+
+    // --- 4. 逻辑 (保持修复后的各向同性) ---
+    function checkCollision(nx, nz, nw) {
+        if(Math.abs(nx)>CONFIG.bound || Math.abs(nz)>CONFIG.bound || Math.abs(nw)>CONFIG.bound) return true;
+        if(!showWalls) return false;
+        let p = {x:nx, z:nz, w:nw};
+        for(let w of wallColliders) {
+            if(Math.abs(p.x - w.cx) < w.r && Math.abs(p.z - w.cz) < w.r && Math.abs(p.w - w.cw) < w.r) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function update() {
+        if(finished) return;
+
+        cam.yaw += input.lx * CONFIG.speedR;
+        cam.pitch4D -= input.ly * CONFIG.speedR;
+
+        // XZW各向同性移动逻辑
+        let c = Math.cos(cam.yaw);
+        let s = Math.sin(cam.yaw);
+        let c4 = Math.cos(cam.pitch4D);
+        let s4 = Math.sin(cam.pitch4D);
+
+        let im_z = input.mz * CONFIG.speedM;
+        let im_w = input.w * CONFIG.speedW;
+
+        // 本地 Z/W 速度 -> 世界 Z/W 速度
+        let rmz = im_z * c4 - im_w * s4;
+        let rw  = im_z * s4 + im_w * c4;
+
+        // 本地 X/Z 速度 -> 世界 X/Z 速度
+        let dx = (input.mx * CONFIG.speedM * c - rmz * s);
+        let dz = (-input.mx * CONFIG.speedM * s - rmz * c);
+        let dw = rw;
+
+        let nx = cam.x + dx;
+        let nz = cam.z + dz;
+        let nw = cam.w + dw;
+
+        let hit = false;
+        if(checkCollision(nx, cam.z, cam.w)) { nx = cam.x; hit = true; }
+        if(checkCollision(nx, nz, cam.w)) { nz = cam.z; hit = true; }
+        if(checkCollision(nx, nz, nw)) { nw = cam.w; hit = true; }
+
+        cam.x = nx; cam.z = nz; cam.w = nw;
+
+        if(hit) {
+            ui.alert.classList.add('active');
+            ui.msg.style.display = 'block';
+        } else {
+            ui.alert.classList.remove('active');
+            ui.msg.style.display = 'none';
+        }
+
+        // 目标检测
+        let allDone = true;
+        goals.forEach(g => {
+            if(!g.done) {
+                let d = Math.sqrt((cam.x-g.x)**2 + (cam.z-g.z)**2 + (cam.w-g.w)**2);
+                g.el.innerText = `${g.name}: ${d.toFixed(1)}m`;
+                if(d < 0.8) {
+                    g.done = true;
+                    g.el.classList.add('done');
+                } else {
+                    allDone = false;
+                }
+            } else {
+                g.el.innerText = `${g.name}: DONE`;
+            }
+        });
+
+        if(allDone) {
+            ui.win.style.display = 'block';
+            finished = true;
+        }
+
+        ui.x.innerText = cam.x.toFixed(1);
+        ui.z.innerText = cam.z.toFixed(1);
+        ui.w.innerText = cam.w.toFixed(1);
+        ui.yaw.innerText = (cam.yaw * 180 / Math.PI % 360).toFixed(0) + "°";
+        ui.pitch.innerText = (cam.pitch4D * 180 / Math.PI % 360).toFixed(0) + "°";
+    }
+
+    function loop() {
+        update();
+        render();
+        requestAnimationFrame(loop);
+    }
+    loop();
+
+    // --- 5. 交互 ---
+    ui.toggle.onclick = () => {
+        showWalls = !showWalls;
+        ui.toggle.innerText = showWalls ? "墙体: ON" : "墙体: OFF";
+        ui.toggle.style.color = showWalls ? "#0af" : "#555";
+        ui.toggle.style.borderColor = showWalls ? "#0af" : "#555";
+    };
+    document.getElementById('btn-reset').onclick = () => {
+        cam = { ...SPAWN };
+        finished = false;
+        ui.win.style.display = 'none';
+        goals.forEach(g => { g.done = false; g.el.classList.remove('done'); });
+    };
+
+    function bindJoy(id, kId, cb) {
+        let area = document.getElementById(id);
+        let knob = document.getElementById(kId);
+        let sx, sy;
+        const move = (cx, cy) => {
+            let dx = cx - sx, dy = cy - sy;
+            let d = Math.sqrt(dx*dx+dy*dy);
+            if(d>40) { dx=dx/d*40; dy=dy/d*40; }
+            knob.style.transform = `translate(-50%,-50%) translate(${dx}px,${dy}px)`;
+            cb(dx/40, dy/40);
+        };
+        area.addEventListener('touchstart', e=>{
+            e.preventDefault(); sx=e.changedTouches[0].clientX; sy=e.changedTouches[0].clientY;
+            knob.style.display='block'; cb(0,0);
+        });
+        area.addEventListener('touchmove', e=>{ e.preventDefault(); move(e.changedTouches[0].clientX, e.changedTouches[0].clientY); });
+        const end = e=>{ e.preventDefault(); knob.style.display='none'; cb(0,0); };
+        area.addEventListener('touchend', end); area.addEventListener('touchcancel', end);
+    }
+
+    bindJoy('stick-l', 'knob-l', (x,y)=> { input.mx=x; input.mz=y; });
+    bindJoy('stick-r', 'knob-r', (x,y)=> { input.lx=x; input.ly=y; });
+
+    const btnK = document.getElementById('btn-k');
+    const btnA = document.getElementById('btn-a');
+    const sw = v => input.w = v;
+    [btnK, btnA].forEach(b => {
+        b.addEventListener('touchstart', e=>{e.preventDefault(); sw(b===btnK?1:-1)});
+        b.addEventListener('touchend', e=>{e.preventDefault(); sw(0)});
+        b.addEventListener('mousedown', e=>sw(b===btnK?1:-1));
+    });
+    window.addEventListener('mouseup', ()=>sw(0));
+
+} catch (e) {
+    document.body.innerHTML = "ERR: " + e.message;
+}
+</script>
+</body>
+</html>
