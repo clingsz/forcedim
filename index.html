@@ -293,6 +293,76 @@ try {
         });
     }
 
+    // 2.4 起点标记 (Starting point marker)
+    {
+        const sp = { x: SPAWN.x, y: SPAWN.y, z: SPAWN.z, w: SPAWN.w };
+        const arrowLen = 2.0;
+        const headLen = 0.3;
+
+        // Big yellow starting point dot
+        addDot(sp, "#ff0", 5.0, 1);
+
+        // Helper to draw arrow with arrowhead
+        function drawArrow(start, dir, color) {
+            const end = {
+                x: start.x + dir.x * arrowLen,
+                y: start.y + dir.y * arrowLen,
+                z: start.z + dir.z * arrowLen,
+                w: start.w + dir.w * arrowLen
+            };
+
+            // Main arrow line
+            addLine(start, end, color, 3);
+
+            // Arrowhead - two lines forming a V
+            // Calculate perpendicular directions for arrowhead
+            const backDir = { x: -dir.x, y: -dir.y, z: -dir.z, w: -dir.w };
+
+            // For X arrow, use Z for perpendicular
+            // For Z arrow, use X for perpendicular
+            // For W arrow, use Y for perpendicular
+            let perp1, perp2;
+            if (dir.x !== 0) {
+                perp1 = { x: 0, y: 0.5, z: 0.5, w: 0 };
+                perp2 = { x: 0, y: 0.5, z: -0.5, w: 0 };
+            } else if (dir.z !== 0) {
+                perp1 = { x: 0.5, y: 0.5, z: 0, w: 0 };
+                perp2 = { x: -0.5, y: 0.5, z: 0, w: 0 };
+            } else {
+                perp1 = { x: 0.5, y: 0.5, z: 0, w: 0 };
+                perp2 = { x: -0.5, y: 0.5, z: 0, w: 0 };
+            }
+
+            const head1 = {
+                x: end.x + (backDir.x + perp1.x) * headLen,
+                y: end.y + (backDir.y + perp1.y) * headLen,
+                z: end.z + (backDir.z + perp1.z) * headLen,
+                w: end.w + (backDir.w + perp1.w) * headLen
+            };
+            const head2 = {
+                x: end.x + (backDir.x + perp2.x) * headLen,
+                y: end.y + (backDir.y + perp2.y) * headLen,
+                z: end.z + (backDir.z + perp2.z) * headLen,
+                w: end.w + (backDir.w + perp2.w) * headLen
+            };
+
+            addLine(end, head1, color, 2.5);
+            addLine(end, head2, color, 2.5);
+
+            // Dot at arrow tip
+            addDot(end, color, 3.0, 1);
+        }
+
+        // X direction arrow (red)
+        drawArrow(sp, { x: 1, y: 0, z: 0, w: 0 }, "#f55");
+
+        // Z direction arrow (yellow/green)
+        drawArrow(sp, { x: 0, y: 0, z: 1, w: 0 }, "#5f5");
+
+        // W direction arrow (cyan)
+        drawArrow(sp, { x: 0, y: 0, z: 0, w: 1 }, "#0ff");
+    }
+
     // --- 3. 渲染管线 (核心修改：线性投影) ---
 
     function project(p) {
