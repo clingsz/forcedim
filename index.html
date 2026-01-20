@@ -390,17 +390,17 @@ try {
         let rz4 = rz3*c4 - rw*s4;
         let rw2 = rz3*s4 + rw*c4;
 
-        // 距离计算用于透明度 (不变)
+        // 距离计算用于透明度
         let dist = Math.sqrt(rx*rx + ry2*ry2 + rz4*rz4 + rw2*rw2);
 
-        // --- NEW: 线性深度计算 ---
-        // 使用加法而不是乘法来合并深度。
-        // 公式：Depth = Z + W + Offset
-        // 这保证了线性方程保持线性（直线变直线）
-
-        let depth = rz4 + rw2 + 3.0; // 3.0 是相机偏移，防止近处裁切太生硬
+        // 深度计算 - 使用ZW平面的距离，这样yaw旋转不会改变物体大小
+        // 使用sqrt(rz4² + rw2²)作为深度，保持4D特性但修复旋转问题
+        let depth = Math.sqrt(rz4*rz4 + rw2*rw2) + 1.0;
 
         if (depth < CONFIG.nearClip) return null;
+
+        // 如果物体在相机后面（rz4 < 0 且 rw2 接近0），不渲染
+        if (rz4 < -0.5 && Math.abs(rw2) < 1.0) return null;
 
         let scale = CONFIG.focalLinear / depth;
 
