@@ -554,6 +554,85 @@ try {
     });
     window.addEventListener('mouseup', ()=>sw(0));
 
+    // --- 6. Keyboard Controls ---
+    const keys = {};
+    window.addEventListener('keydown', e => {
+        keys[e.code] = true;
+        updateKeyboardInput();
+    });
+    window.addEventListener('keyup', e => {
+        keys[e.code] = false;
+        updateKeyboardInput();
+    });
+
+    function updateKeyboardInput() {
+        // Movement: WASD or Arrow keys
+        let mx = 0, mz = 0;
+        if (keys['KeyW'] || keys['ArrowUp']) mz = -1;
+        if (keys['KeyS'] || keys['ArrowDown']) mz = 1;
+        if (keys['KeyA'] || keys['ArrowLeft']) mx = -1;
+        if (keys['KeyD'] || keys['ArrowRight']) mx = 1;
+        input.mx = mx;
+        input.mz = mz;
+
+        // W axis: Q (W-) and E (W+)
+        let w = 0;
+        if (keys['KeyE']) w = 1;
+        if (keys['KeyQ']) w = -1;
+        input.w = w;
+    }
+
+    // --- 7. Mouse Controls (Look) ---
+    let mouseDown = false;
+    let mouseLocked = false;
+
+    canvas.addEventListener('mousedown', e => {
+        mouseDown = true;
+        // Request pointer lock for smoother mouse look
+        if (!mouseLocked) {
+            canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
+            if (canvas.requestPointerLock) {
+                canvas.requestPointerLock();
+            }
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        mouseDown = false;
+    });
+
+    document.addEventListener('pointerlockchange', () => {
+        mouseLocked = document.pointerLockElement === canvas;
+    });
+
+    document.addEventListener('mozpointerlockchange', () => {
+        mouseLocked = document.pointerLockElement === canvas;
+    });
+
+    canvas.addEventListener('mousemove', e => {
+        if (mouseLocked) {
+            // Pointer locked - use movementX/Y directly
+            const sensitivity = 0.003;
+            cam.yaw += e.movementX * sensitivity;
+            cam.pitch4D -= e.movementY * sensitivity;
+        } else if (mouseDown) {
+            // Fallback: drag to look
+            const sensitivity = 0.003;
+            cam.yaw += e.movementX * sensitivity;
+            cam.pitch4D -= e.movementY * sensitivity;
+        }
+    });
+
+    // ESC to exit pointer lock (browser handles this, but good to know)
+    window.addEventListener('keydown', e => {
+        if (e.code === 'Escape' && mouseLocked) {
+            document.exitPointerLock = document.exitPointerLock || document.mozExitPointerLock;
+            if (document.exitPointerLock) {
+                document.exitPointerLock();
+            }
+        }
+    });
+
 } catch (e) {
     document.body.innerHTML = "ERR: " + e.message;
 }

@@ -20,12 +20,32 @@ This is an interactive visualization of 4D space rendered onto a 2D screen using
 
 ## Controls
 
+### Mobile (Touch)
+
 | Control | Action |
 |---------|--------|
 | Left Joystick | Move forward/backward and strafe |
 | Right Joystick | Rotate camera (Yaw) and 4D view angle (Pitch4D) |
 | W+ Button | Move in positive W direction |
 | W- Button | Move in negative W direction |
+
+### Desktop (Keyboard + Mouse)
+
+| Control | Action |
+|---------|--------|
+| W / Arrow Up | Move forward |
+| S / Arrow Down | Move backward |
+| A / Arrow Left | Strafe left |
+| D / Arrow Right | Strafe right |
+| E | Move in positive W direction (W+) |
+| Q | Move in negative W direction (W-) |
+| Mouse (click to lock) | Look around (Yaw and Pitch4D) |
+| ESC | Exit mouse lock |
+
+### UI Buttons
+
+| Control | Action |
+|---------|--------|
 | Wall Toggle | Enable/disable wall obstacles |
 | Reset | Return to starting position |
 
